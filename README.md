@@ -3,12 +3,39 @@
 Transcribe vídeos de YouTube a partir de su enlace y, opcionalmente, genera un
 breve resumen con los puntos más importantes usando la API de Claude.
 
-Se puede usar de dos formas:
+Se puede usar de tres formas:
 
-- **Interfaz web** (`app.py`): una pequeña plataforma que abres en el navegador,
-  desde el móvil o cualquier ordenador. Puedes desplegarla en un hosting para
-  usarla desde fuera de casa.
+- **Página HTML (100% en el navegador)** (`docs/index.html`): sin servidor y
+  gratis. Subes o arrastras un archivo de audio/vídeo y se transcribe en tu
+  propio dispositivo con Whisper (vía `transformers.js`). Se puede publicar en
+  **GitHub Pages**. Limitación: **no** puede descargar el audio de un enlace de
+  YouTube (el navegador no puede por CORS); para eso hace falta el servidor.
+- **Interfaz web con servidor** (`app.py`): una pequeña plataforma Flask donde sí
+  puedes **pegar el enlace de YouTube** y transcribirlo. Necesita un servidor.
 - **Línea de comandos** (`transcriptor.py`): para usarla desde la terminal.
+
+### ¿Qué versión elijo?
+
+| | HTML (GitHub Pages) | Servidor (`app.py`) |
+|---|---|---|
+| Pegar enlace de YouTube | ❌ | ✅ |
+| Subir/arrastrar un archivo | ✅ | ✅ |
+| Coste | Gratis, sin servidor | Necesita hosting |
+| Resumen con Claude | ❌ (expondría la clave) | ✅ |
+
+## Página HTML en el navegador (GitHub Pages)
+
+El archivo `docs/index.html` es autónomo. Para publicarlo gratis:
+
+1. En GitHub: **Settings → Pages**.
+2. En *Source*, elige la rama y la carpeta **/docs**.
+3. Guarda. En un minuto tendrás una URL pública que funciona en móvil y ordenador.
+
+También puedes abrirlo en local con cualquier servidor estático, por ejemplo:
+
+```bash
+python -m http.server -d docs 8080   # y abre http://localhost:8080
+```
 
 ## Métodos de transcripción
 

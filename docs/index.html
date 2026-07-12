@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcriptor (100% en el navegador)</title>
+  <style>
+    :root { --rojo: #cc0000; --fondo: #f4f4f5; --texto: #18181b; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; background: var(--fondo); color: var(--texto); line-height: 1.5; }
+    .contenedor { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    p.sub { color: #52525b; margin-top: 0; }
+    .tarjeta { background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 20px; }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: .9rem; }
+    select { width: 100%; padding: 10px 12px; border: 1px solid #d4d4d8; border-radius: 8px;
+      font-size: 1rem; background: #fff; }
+    .fila { display: flex; gap: 12px; flex-wrap: wrap; }
+    .fila > div { flex: 1; min-width: 150px; }
+    .zona { border: 2px dashed #c4c4c8; border-radius: 10px; padding: 28px; text-align: center;
+      color: #71717a; cursor: pointer; transition: .15s; }
+    .zona.activa { border-color: var(--rojo); background: #fff5f5; color: var(--rojo); }
+    .zona strong { color: var(--texto); }
+    button { margin-top: 18px; width: 100%; padding: 12px; font-size: 1rem; font-weight: 700;
+      color: #fff; background: var(--rojo); border: none; border-radius: 8px; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: default; }
+    #estado { margin-top: 16px; font-weight: 600; color: #52525b; }
+    .barra { height: 8px; background: #e4e4e7; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .barra > div { height: 100%; width: 0; background: var(--rojo); transition: width .2s; }
+    .resultado { white-space: pre-wrap; word-wrap: break-word; background: #fafafa;
+      border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; font-size: .95rem; margin-top: 10px; }
+    .oculto { display: none; }
+    .copiar { margin-top: 10px; width: auto; padding: 8px 14px; background: #3f3f46; font-size: .85rem; }
+    .nota { font-size: .82rem; color: #71717a; margin-top: 14px; }
+    code { background: #eee; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
+    <h1>🎙️ Transcriptor en el navegador</h1>
+    <p class="sub">Sube o arrastra un archivo de audio o vídeo y se transcribe aquí mismo, sin servidor. Funciona en varios idiomas.</p>
+
+    <div class="tarjeta">
+      <div class="zona" id="zona">
+        <p>📂 <strong>Arrastra un archivo aquí</strong> o pulsa para elegirlo</p>
+        <p id="nombre-archivo" style="font-size:.85rem;"></p>
+      </div>
+      <input type="file" id="archivo" accept="audio/*,video/*" class="oculto">
+
+      <div class="fila">
+        <div>
+          <label for="idioma">Idioma</label>
+          <select id="idioma">
+            <option value="">Detección automática</option>
+            <option value="spanish">Español</option>
+            <option value="english">Inglés</option>
+            <option value="french">Francés</option>
+            <option value="german">Alemán</option>
+            <option value="italian">Italiano</option>
+            <option value="portuguese">Portugués</option>
+            <option value="catalan">Catalán</option>
+          </select>
+        </div>
+        <div>
+          <label for="modelo">Modelo</label>
+          <select id="modelo">
+            <option value="Xenova/whisper-tiny">tiny (rápido)</option>
+            <option value="Xenova/whisper-base" selected>base (equilibrado)</option>
+            <option value="Xenova/whisper-small">small (más preciso, más pesado)</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="btn" disabled>Transcribir</button>
+      <div id="estado" class="oculto"></div>
+      <div class="barra oculto" id="barra"><div id="barra-progreso"></div></div>
+
+      <p class="nota">La primera vez se descarga el modelo (unos MB) y se guarda en caché para las siguientes. Todo ocurre en tu dispositivo: el audio no se sube a ningún sitio.</p>
+    </div>
+
+    <div class="tarjeta oculto" id="tarjeta-resultado">
+      <h3 style="margin-top:0;">📝 Transcripción</h3>
+      <div class="resultado" id="salida"></div>
+      <button class="copiar" onclick="copiar()">Copiar</button>
+    </div>
+
+    <p class="nota">¿Necesitas pegar directamente un <strong>enlace de YouTube</strong>? Eso requiere la versión con servidor (<code>app.py</code>), porque el navegador no puede descargar el audio de YouTube por sí solo.</p>
+  </div>
+
+  <script type="module">
+    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+    env.allowLocalModels = false;
+
+    const zona = document.getElementById('zona');
+    const inputArchivo = document.getElementById('archivo');
+    const btn = document.getElementById('btn');
+    const estado = document.getElementById('estado');
+    const barra = document.getElementById('barra');
+    const barraProg = document.getElementById('barra-progreso');
+    let archivoSel = null;
+    let transcriptor = null;
+    let modeloCargado = null;
+
+    zona.addEventListener('click', () => inputArchivo.click());
+    zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('activa'); });
+    zona.addEventListener('dragleave', () => zona.classList.remove('activa'));
+    zona.addEventListener('drop', e => {
+      e.preventDefault(); zona.classList.remove('activa');
+      if (e.dataTransfer.files.length) elegir(e.dataTransfer.files[0]);
+    });
+    inputArchivo.addEventListener('change', () => {
+      if (inputArchivo.files.length) elegir(inputArchivo.files[0]);
+    });
+
+    function elegir(f) {
+      archivoSel = f;
+      document.getElementById('nombre-archivo').textContent = '✅ ' + f.name;
+      btn.disabled = false;
+    }
+
+    function poner(txt) { estado.classList.remove('oculto'); estado.textContent = txt; }
+
+    // Decodifica el archivo a audio mono 16 kHz (lo que espera Whisper).
+    async function leerAudio(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const decoded = await ctx.decodeAudioData(arrayBuffer);
+      if (decoded.numberOfChannels === 1) return decoded.getChannelData(0);
+      // Mezclar a mono.
+      const izq = decoded.getChannelData(0);
+      const der = decoded.getChannelData(1);
+      const mono = new Float32Array(izq.length);
+      for (let i = 0; i < izq.length; i++) mono[i] = (izq[i] + der[i]) / 2;
+      return mono;
+    }
+
+    btn.addEventListener('click', async () => {
+      if (!archivoSel) return;
+      btn.disabled = true;
+      const modelo = document.getElementById('modelo').value;
+      const idioma = document.getElementById('idioma').value;
+
+      try {
+        if (!transcriptor || modeloCargado !== modelo) {
+          poner('⬇️ Cargando el modelo (solo la primera vez)...');
+          barra.classList.remove('oculto');
+          transcriptor = await pipeline('automatic-speech-recognition', modelo, {
+            progress_callback: d => {
+              if (d.status === 'progress' && d.progress != null) {
+                barraProg.style.width = d.progress.toFixed(0) + '%';
+              }
+            }
+          });
+          modeloCargado = modelo;
+        }
+
+        poner('🎧 Leyendo el audio...');
+        const audio = await leerAudio(archivoSel);
+
+        poner('✍️ Transcribiendo (puede tardar según la duración)...');
+        barraProg.style.width = '0%';
+        const opciones = {
+          chunk_length_s: 30,
+          stride_length_s: 5,
+          return_timestamps: false
+        };
+        if (idioma) { opciones.language = idioma; opciones.task = 'transcribe'; }
+
+        const resultado = await transcriptor(audio, opciones);
+
+        estado.classList.add('oculto');
+        barra.classList.add('oculto');
+        document.getElementById('tarjeta-resultado').classList.remove('oculto');
+        document.getElementById('salida').textContent = resultado.text.trim();
+      } catch (e) {
+        poner('❌ Error: ' + (e.message || e));
+        barra.classList.add('oculto');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    window.copiar = function () {
+      const t = document.getElementById('salida').textContent;
+      navigator.clipboard.writeText(t).then(() => alert('Transcripción copiada.'));
+    };
+  </script>
+</body>
+</html>
