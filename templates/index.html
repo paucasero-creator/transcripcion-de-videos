@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcriptor de vídeos de YouTube</title>
+  <style>
+    :root { --azul: #cc0000; --fondo: #f4f4f5; --texto: #18181b; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; background: var(--fondo); color: var(--texto); line-height: 1.5;
+    }
+    .contenedor { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    p.sub { color: #52525b; margin-top: 0; }
+    .tarjeta { background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 20px; }
+    label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: .9rem; }
+    input[type=text], select {
+      width: 100%; padding: 10px 12px; border: 1px solid #d4d4d8;
+      border-radius: 8px; font-size: 1rem; background: #fff;
+    }
+    .fila { display: flex; gap: 12px; flex-wrap: wrap; }
+    .fila > div { flex: 1; min-width: 140px; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 600; }
+    .check input { width: auto; }
+    button {
+      margin-top: 18px; width: 100%; padding: 12px; font-size: 1rem; font-weight: 700;
+      color: #fff; background: var(--azul); border: none; border-radius: 8px; cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: default; }
+    .aviso { font-size: .8rem; color: #a16207; margin-top: 8px; }
+    #estado { margin-top: 16px; font-weight: 600; color: #52525b; display: none; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 3px solid #ddd;
+      border-top-color: var(--azul); border-radius: 50%; animation: giro 1s linear infinite;
+      vertical-align: middle; margin-right: 8px; }
+    @keyframes giro { to { transform: rotate(360deg); } }
+    .resultado { white-space: pre-wrap; word-wrap: break-word; background: #fafafa;
+      border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; font-size: .95rem; }
+    .resultado h3 { margin-top: 0; }
+    .error { color: #b91c1c; font-weight: 600; }
+    .oculto { display: none; }
+    .copiar { margin-top: 10px; width: auto; padding: 8px 14px; background: #3f3f46; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
+    <h1>🎬 Transcriptor de YouTube</h1>
+    <p class="sub">Pega un enlace de YouTube y obtén la transcripción completa. Opcionalmente, un resumen con lo más importante.</p>
+
+    <div class="tarjeta">
+      <label for="url">Enlace del vídeo</label>
+      <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+
+      <div class="fila">
+        <div>
+          <label for="metodo">Método</label>
+          <select id="metodo">
+            <option value="audio">Audio (Whisper, más preciso)</option>
+            <option value="subtitulos">Subtítulos de YouTube (rápido)</option>
+          </select>
+        </div>
+        <div>
+          <label for="idioma">Idioma</label>
+          <select id="idioma">
+            <option value="">Detección automática</option>
+            <option value="es">Español</option>
+            <option value="en">Inglés</option>
+            <option value="fr">Francés</option>
+            <option value="de">Alemán</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Portugués</option>
+            <option value="ca">Catalán</option>
+          </select>
+        </div>
+        <div>
+          <label for="modelo">Modelo (audio)</label>
+          <select id="modelo">
+            {% for m in modelos %}
+            <option value="{{ m }}"{% if m == 'base' %} selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <label class="check"><input type="checkbox" id="resumen"> Generar también un resumen</label>
+      {% if not hay_api_key %}
+      <div class="aviso">⚠️ El resumen necesita configurar ANTHROPIC_API_KEY en el servidor.</div>
+      {% endif %}
+
+      <button id="btn" onclick="transcribir()">Transcribir</button>
+      <div id="estado"><span class="spinner"></span><span id="estado-texto">Procesando...</span></div>
+    </div>
+
+    <div class="tarjeta oculto" id="tarjeta-resultado">
+      <div id="error-box" class="error oculto"></div>
+      <div id="resumen-box" class="oculto">
+        <h3>📌 Resumen</h3>
+        <div class="resultado" id="resumen-texto"></div>
+      </div>
+      <div id="transcripcion-box" class="oculto" style="margin-top:16px;">
+        <h3>📝 Transcripción</h3>
+        <div class="resultado" id="transcripcion-texto"></div>
+        <button class="copiar" onclick="copiar()">Copiar transcripción</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function transcribir() {
+      const url = document.getElementById('url').value.trim();
+      if (!url) { alert('Introduce un enlace de YouTube.'); return; }
+
+      const btn = document.getElementById('btn');
+      const estado = document.getElementById('estado');
+      const metodo = document.getElementById('metodo').value;
+      const resumen = document.getElementById('resumen').checked;
+
+      btn.disabled = true;
+      estado.style.display = 'block';
+      document.getElementById('estado-texto').textContent =
+        metodo === 'audio' ? 'Descargando y transcribiendo el audio (puede tardar)...' : 'Obteniendo la transcripción...';
+      document.getElementById('tarjeta-resultado').classList.add('oculto');
+
+      try {
+        const resp = await fetch('/api/transcribir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            metodo,
+            idioma: document.getElementById('idioma').value,
+            modelo: document.getElementById('modelo').value,
+            resumen
+          })
+        });
+        const datos = await resp.json();
+        mostrar(datos, resp.ok);
+      } catch (e) {
+        mostrar({ error: 'No se ha podido conectar con el servidor.' }, false);
+      } finally {
+        btn.disabled = false;
+        estado.style.display = 'none';
+      }
+    }
+
+    function mostrar(datos, ok) {
+      const tarjeta = document.getElementById('tarjeta-resultado');
+      const errorBox = document.getElementById('error-box');
+      const resumenBox = document.getElementById('resumen-box');
+      const transBox = document.getElementById('transcripcion-box');
+      tarjeta.classList.remove('oculto');
+      errorBox.classList.add('oculto');
+      resumenBox.classList.add('oculto');
+      transBox.classList.add('oculto');
+
+      if (!ok || datos.error) {
+        errorBox.textContent = '❌ ' + (datos.error || 'Ha ocurrido un error.');
+        errorBox.classList.remove('oculto');
+        return;
+      }
+
+      if (datos.resumen) {
+        document.getElementById('resumen-texto').textContent = datos.resumen;
+        resumenBox.classList.remove('oculto');
+      } else if (datos.aviso_resumen) {
+        document.getElementById('resumen-texto').textContent = '⚠️ ' + datos.aviso_resumen;
+        resumenBox.classList.remove('oculto');
+      }
+
+      document.getElementById('transcripcion-texto').textContent = datos.transcripcion;
+      transBox.classList.remove('oculto');
+    }
+
+    function copiar() {
+      const texto = document.getElementById('transcripcion-texto').textContent;
+      navigator.clipboard.writeText(texto).then(() => {
+        alert('Transcripción copiada al portapapeles.');
+      });
+    }
+  </script>
+</body>
+</html>
