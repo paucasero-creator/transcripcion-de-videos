@@ -66,14 +66,46 @@ Para generar resúmenes, define tu clave de Anthropic:
 export ANTHROPIC_API_KEY="tu-clave-aqui"
 ```
 
-## Uso: interfaz web
+## Uso: interfaz web en tu ordenador (recomendado para YouTube)
+
+Ejecutarlo en tu propio ordenador es la forma **más fiable** de transcribir el
+audio de YouTube: desde tu conexión de casa, YouTube no bloquea las descargas
+(cosa que sí ocurre en servidores como Render).
+
+### Arranque de un clic
+
+- **Windows:** haz doble clic en **`iniciar.bat`**
+- **Mac / Linux:** ejecuta **`./iniciar.sh`** (o `bash iniciar.sh`)
+
+La primera vez instala todo lo necesario (tarda un poco) y después abre solo la
+web en **http://localhost:5000**. Pega el enlace de YouTube, elige idioma y
+modelo, y pulsa **Transcribir**.
+
+> Para el audio necesitas tener **ffmpeg** instalado (ver sección Instalación).
+
+### Arranque manual (alternativa)
 
 ```bash
+pip install -r requirements.txt
 python app.py
 ```
 
-Abre **http://localhost:5000** en el navegador. Pega el enlace, elige el método
-y el idioma, marca si quieres resumen y pulsa **Transcribir**.
+Y abre **http://localhost:5000**.
+
+## Nota sobre YouTube en servidores (Render)
+
+YouTube bloquea las descargas desde IP de centros de datos ("Sign in to confirm
+you're not a bot"). Para usar el audio en Render tienes dos vías, configurables
+por variables de entorno:
+
+- **`YT_COOKIES`**: pega el contenido de un archivo de cookies de YouTube
+  (formato Netscape, exportado con una extensión tipo "Get cookies.txt LOCALLY").
+  También puedes usar **`YT_COOKIES_FILE`** con la ruta a un archivo.
+- **`YT_PROXY`**: URL de un proxy (p. ej. residencial) para evitar el bloqueo
+  por IP.
+
+Si no se configura ninguna y el audio falla por este motivo, la app intenta
+automáticamente usar los **subtítulos** de YouTube como alternativa.
 
 ## Uso: línea de comandos
 
