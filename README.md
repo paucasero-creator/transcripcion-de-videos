@@ -85,16 +85,32 @@ python transcriptor.py "URL" --modelo small
 python transcriptor.py "URL" --resumen --guardar transcripcion.txt
 ```
 
-## Desplegar en un hosting (usarlo desde cualquier sitio)
+## Desplegar en Render (gratis)
 
-El proyecto incluye un `Procfile` listo para plataformas tipo **Render**,
-**Railway** o **Fly.io**:
+El proyecto incluye un `Dockerfile` (con `ffmpeg` ya instalado) y un
+`render.yaml`, así que el despliegue es casi automático:
 
-1. Sube este repositorio a la plataforma que elijas.
-2. Configura la variable de entorno `ANTHROPIC_API_KEY` (si quieres resúmenes).
-3. Asegúrate de que la imagen/entorno tenga **ffmpeg** instalado. En Render, por
-   ejemplo, se puede añadir con un `apt` en el build o usando un Dockerfile.
-4. La plataforma usará el `Procfile`, que arranca la web con `gunicorn`.
+1. Sube este repositorio a GitHub (ya está).
+2. Entra en [render.com](https://render.com), crea una cuenta gratuita y pulsa
+   **New → Web Service**.
+3. Conecta tu repositorio de GitHub. Render detectará el `render.yaml` y el
+   `Dockerfile` automáticamente (runtime **Docker**, plan **free**).
+4. (Opcional) Si quieres la opción de resumen, en **Environment** añade la
+   variable `ANTHROPIC_API_KEY` con tu clave (márcala como secreta).
+5. Pulsa **Create Web Service**. La primera construcción tarda unos minutos
+   (descarga el modelo de Whisper). Al terminar tendrás una URL pública.
+
+> **Plan gratuito de Render:** 512 MB de RAM y el servicio se "duerme" tras 15
+> min sin uso (tarda ~30 s en despertar en la siguiente visita). Con el modelo
+> `base` y vídeos no muy largos funciona; si te quedas sin memoria con vídeos
+> largos, cambia `plan: free` por `plan: starter` en `render.yaml` (de pago) o
+> usa la versión HTML de GitHub Pages.
+
+### Otras plataformas
+
+El `Dockerfile` también sirve para **Railway**, **Fly.io** o cualquier hosting
+que soporte Docker. El `Procfile` incluido permite además despliegues sin Docker
+(donde tengas `ffmpeg` disponible), arrancando la web con `gunicorn`.
 
 > **Importante sobre recursos:** Whisper consume CPU y memoria. En los planes
 > gratuitos puede ir lento o quedarse sin memoria con vídeos largos o modelos

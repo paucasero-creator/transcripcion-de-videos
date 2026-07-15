@@ -1,0 +1,13 @@
+# Configuración de despliegue para Render (https://render.com).
+# Con este archivo, Render detecta el servicio automáticamente al conectar el repo.
+services:
+  - type: web
+    name: transcriptor-youtube
+    runtime: docker
+    plan: free            # plan gratuito (512 MB RAM). Sube a 'starter' si te quedas corto.
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # Necesaria solo si quieres la opción de resumen con Claude.
+      # Márcala como secreta en el panel de Render y pega ahí tu clave.
+      - key: ANTHROPIC_API_KEY
+        sync: false
