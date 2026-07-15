@@ -237,8 +237,22 @@ def generar_resumen(texto: str) -> str:
 
 def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
                 modelo: str = "base") -> str:
-    """Función de alto nivel: transcribe un vídeo con el método indicado."""
+    """Función de alto nivel: transcribe un vídeo con el método indicado.
+    Si falla el audio (por cookies de YouTube), cambia automáticamente a subtítulos."""
     video_id = extraer_id_video(url)
+
     if metodo == "audio":
-        return transcribir_con_whisper(url, modelo, idioma)
+        try:
+            return transcribir_con_whisper(url, modelo, idioma)
+        except RuntimeError as e:
+            # Si falla por cookies/autenticación de YouTube, intenta con subtítulos
+            if "cookies" in str(e).lower() or "sign in" in str(e).lower():
+                print("Audio bloqueado por YouTube; intentando con subtítulos...", file=sys.stderr)
+                try:
+                    return transcribir_con_subtitulos(video_id, idioma)
+                except RuntimeError:
+                    # Si tampoco hay subtítulos, devuelve el error original del audio
+                    raise e
+            raise
+
     return transcribir_con_subtitulos(video_id, idioma)
