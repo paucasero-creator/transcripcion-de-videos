@@ -80,6 +80,16 @@ def descargar_audio(url: str, carpeta: str) -> str:
         "outtmpl": plantilla,
         "quiet": True,
         "no_warnings": True,
+        # Headers para evitar que YouTube bloquee
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        # Reintentos y timeouts robustos
+        "socket_timeout": 30,
+        "retries": {"max_retries": 3, "backoff_factor": 0.5},
+        # Descargar subtítulos si están disponibles (fallback a audio limpio)
+        "skip_unavailable_fragments": True,
+        "fragment_retries": 3,
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -93,11 +103,13 @@ def descargar_audio(url: str, carpeta: str) -> str:
         with yt_dlp.YoutubeDL(opciones) as ydl:
             ydl.download([url])
     except Exception as e:
-        raise RuntimeError(f"No se ha podido descargar el audio: {e}")
+        raise RuntimeError(
+            f"No se ha podido descargar el audio de YouTube: {e}. "
+            "Si el vídeo está protegido, intenta con la versión HTML (sube un archivo)."
+        )
 
     ruta = os.path.join(carpeta, "audio.mp3")
     if not os.path.exists(ruta):
-        # Por si el postprocesador no generó .mp3, buscar cualquier archivo.
         for nombre in os.listdir(carpeta):
             if nombre.startswith("audio."):
                 return os.path.join(carpeta, nombre)
