@@ -99,6 +99,25 @@ def descargar_audio(url: str, carpeta: str) -> str:
         ],
     }
 
+    # Cookies de YouTube para saltar el bloqueo "confirma que no eres un bot"
+    # (necesario en servidores como Render). Se pueden aportar de dos formas:
+    #   - YT_COOKIES_FILE: ruta a un archivo de cookies (formato Netscape).
+    #   - YT_COOKIES: contenido del archivo de cookies directamente (útil como
+    #     variable de entorno en Render). Se vuelca a un archivo temporal.
+    cookies_file = os.environ.get("YT_COOKIES_FILE")
+    cookies_data = os.environ.get("YT_COOKIES")
+    if not cookies_file and cookies_data:
+        cookies_file = os.path.join(carpeta, "cookies.txt")
+        with open(cookies_file, "w", encoding="utf-8") as f:
+            f.write(cookies_data)
+    if cookies_file and os.path.exists(cookies_file):
+        opciones["cookiefile"] = cookies_file
+
+    # Opción para usar un proxy (p. ej. residencial) y evitar el bloqueo por IP.
+    proxy = os.environ.get("YT_PROXY")
+    if proxy:
+        opciones["proxy"] = proxy
+
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
             ydl.download([url])
