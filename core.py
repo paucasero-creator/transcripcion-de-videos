@@ -86,7 +86,7 @@ def descargar_audio(url: str, carpeta: str) -> str:
         },
         # Reintentos y timeouts robustos
         "socket_timeout": 30,
-        "retries": {"max_retries": 3, "backoff_factor": 0.5},
+        "retries": 3,
         # Descargar subtítulos si están disponibles (fallback a audio limpio)
         "skip_unavailable_fragments": True,
         "fragment_retries": 3,
