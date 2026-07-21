@@ -257,21 +257,28 @@ def generar_resumen(texto: str) -> str:
 def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
                 modelo: str = "base") -> str:
     """Función de alto nivel: transcribe un vídeo con el método indicado.
-    Si falla el audio (por cookies de YouTube), cambia automáticamente a subtítulos."""
-    video_id = extraer_id_video(url)
 
+    El método 'audio' funciona con cualquier web que soporte yt-dlp (YouTube,
+    Twitter/X, Instagram, TikTok, Vimeo, Facebook...). El método 'subtitulos'
+    es solo para YouTube.
+    Si el audio de YouTube falla por cookies, cambia automáticamente a subtítulos.
+    """
     if metodo == "audio":
+        # El audio no necesita ID: yt-dlp acepta la URL directamente (multi-web).
         try:
             return transcribir_con_whisper(url, modelo, idioma)
         except RuntimeError as e:
-            # Si falla por cookies/autenticación de YouTube, intenta con subtítulos
+            # Si falla por cookies/autenticación de YouTube, intenta con subtítulos.
             if "cookies" in str(e).lower() or "sign in" in str(e).lower():
                 print("Audio bloqueado por YouTube; intentando con subtítulos...", file=sys.stderr)
                 try:
+                    video_id = extraer_id_video(url)
                     return transcribir_con_subtitulos(video_id, idioma)
-                except RuntimeError:
-                    # Si tampoco hay subtítulos, devuelve el error original del audio
+                except (ValueError, RuntimeError):
+                    # Si no es YouTube o no hay subtítulos, devuelve el error del audio.
                     raise e
             raise
 
+    # Método subtítulos: solo YouTube (necesita el ID del vídeo).
+    video_id = extraer_id_video(url)
     return transcribir_con_subtitulos(video_id, idioma)
