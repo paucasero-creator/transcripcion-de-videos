@@ -39,9 +39,10 @@ def api_transcribir():
     idioma = (datos.get("idioma") or "").strip() or None
     modelo = datos.get("modelo") or "base"
     resumen = bool(datos.get("resumen"))
+    traducir_a = (datos.get("traducir_a") or "").strip() or None
 
     if not url:
-        return jsonify({"error": "Introduce un enlace de YouTube."}), 400
+        return jsonify({"error": "Introduce un enlace de vídeo."}), 400
 
     try:
         transcripcion = core.transcribir(
@@ -52,9 +53,18 @@ def api_transcribir():
 
     respuesta = {"transcripcion": transcripcion}
 
+    # Traducción opcional al idioma elegido (texto sobre el que se resume).
+    texto_base = transcripcion
+    if traducir_a:
+        try:
+            respuesta["traduccion"] = core.traducir(transcripcion, traducir_a)
+            texto_base = respuesta["traduccion"]
+        except RuntimeError as e:
+            respuesta["aviso_traduccion"] = str(e)
+
     if resumen:
         try:
-            respuesta["resumen"] = core.generar_resumen(transcripcion)
+            respuesta["resumen"] = core.generar_resumen(texto_base)
         except RuntimeError as e:
             respuesta["aviso_resumen"] = str(e)
 

@@ -84,9 +84,21 @@
         </div>
       </div>
 
+      <label for="traducir">Traducir la transcripción a</label>
+      <select id="traducir">
+        <option value="">No traducir (idioma original)</option>
+        <option value="es">Español</option>
+        <option value="en">Inglés</option>
+        <option value="fr">Francés</option>
+        <option value="de">Alemán</option>
+        <option value="it">Italiano</option>
+        <option value="pt">Portugués</option>
+        <option value="ca">Catalán</option>
+      </select>
+
       <label class="check"><input type="checkbox" id="resumen"> Generar también un resumen</label>
       {% if not hay_api_key %}
-      <div class="aviso">⚠️ El resumen necesita configurar ANTHROPIC_API_KEY en el servidor.</div>
+      <div class="aviso">⚠️ La traducción y el resumen necesitan configurar ANTHROPIC_API_KEY.</div>
       {% endif %}
 
       <button id="btn" onclick="transcribir()">Transcribir</button>
@@ -99,10 +111,15 @@
         <h3>📌 Resumen</h3>
         <div class="resultado" id="resumen-texto"></div>
       </div>
+      <div id="traduccion-box" class="oculto" style="margin-top:16px;">
+        <h3>🌐 Traducción</h3>
+        <div class="resultado" id="traduccion-texto"></div>
+        <button class="copiar" onclick="copiar('traduccion-texto')">Copiar traducción</button>
+      </div>
       <div id="transcripcion-box" class="oculto" style="margin-top:16px;">
-        <h3>📝 Transcripción</h3>
+        <h3>📝 Transcripción (original)</h3>
         <div class="resultado" id="transcripcion-texto"></div>
-        <button class="copiar" onclick="copiar()">Copiar transcripción</button>
+        <button class="copiar" onclick="copiar('transcripcion-texto')">Copiar transcripción</button>
       </div>
     </div>
   </div>
@@ -132,6 +149,7 @@
             metodo,
             idioma: document.getElementById('idioma').value,
             modelo: document.getElementById('modelo').value,
+            traducir_a: document.getElementById('traducir').value,
             resumen
           })
         });
@@ -149,10 +167,12 @@
       const tarjeta = document.getElementById('tarjeta-resultado');
       const errorBox = document.getElementById('error-box');
       const resumenBox = document.getElementById('resumen-box');
+      const tradBox = document.getElementById('traduccion-box');
       const transBox = document.getElementById('transcripcion-box');
       tarjeta.classList.remove('oculto');
       errorBox.classList.add('oculto');
       resumenBox.classList.add('oculto');
+      tradBox.classList.add('oculto');
       transBox.classList.add('oculto');
 
       if (!ok || datos.error) {
@@ -169,12 +189,20 @@
         resumenBox.classList.remove('oculto');
       }
 
+      if (datos.traduccion) {
+        document.getElementById('traduccion-texto').textContent = datos.traduccion;
+        tradBox.classList.remove('oculto');
+      } else if (datos.aviso_traduccion) {
+        document.getElementById('traduccion-texto').textContent = '⚠️ ' + datos.aviso_traduccion;
+        tradBox.classList.remove('oculto');
+      }
+
       document.getElementById('transcripcion-texto').textContent = datos.transcripcion;
       transBox.classList.remove('oculto');
     }
 
-    function copiar() {
-      const texto = document.getElementById('transcripcion-texto').textContent;
+    function copiar(id) {
+      const texto = document.getElementById(id || 'transcripcion-texto').textContent;
       navigator.clipboard.writeText(texto).then(() => {
         alert('Transcripción copiada al portapapeles.');
       });

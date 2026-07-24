@@ -254,6 +254,52 @@ def generar_resumen(texto: str) -> str:
     return "\n".join(partes).strip()
 
 
+# Nombres legibles de idioma para el prompt de traducción.
+NOMBRES_IDIOMA = {
+    "es": "español", "en": "inglés", "fr": "francés", "de": "alemán",
+    "it": "italiano", "pt": "portugués", "ca": "catalán", "gl": "gallego",
+    "eu": "euskera", "zh": "chino", "ja": "japonés", "ru": "ruso",
+    "ar": "árabe",
+}
+
+
+def traducir(texto: str, idioma_destino: str) -> str:
+    """Traduce la transcripción al idioma indicado usando Claude."""
+    try:
+        import anthropic
+    except ImportError:
+        raise RuntimeError(
+            "Falta la librería 'anthropic'. Instálala con: pip install anthropic"
+        )
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Para traducir define la variable de entorno ANTHROPIC_API_KEY."
+        )
+
+    nombre = NOMBRES_IDIOMA.get(idioma_destino, idioma_destino)
+    client = anthropic.Anthropic(api_key=api_key)
+
+    prompt = (
+        f"Traduce el siguiente texto al {nombre}. Devuelve únicamente la "
+        "traducción, sin comentarios ni notas, respetando el sentido y el tono "
+        "original. Si el texto ya está en ese idioma, devuélvelo tal cual.\n\n"
+        f"Texto:\n{texto}"
+    )
+
+    with client.messages.stream(
+        model=MODELO_CLAUDE,
+        max_tokens=8000,
+        thinking={"type": "adaptive"},
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        mensaje = stream.get_final_message()
+
+    partes = [bloque.text for bloque in mensaje.content if bloque.type == "text"]
+    return "\n".join(partes).strip()
+
+
 def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
                 modelo: str = "base") -> str:
     """Función de alto nivel: transcribe un vídeo con el método indicado.
