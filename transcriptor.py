@@ -16,6 +16,12 @@ Para la interfaz web, ejecuta: python app.py
 import argparse
 import sys
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import core
 
 

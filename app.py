@@ -15,6 +15,14 @@ Para desplegarlo en un hosting y usarlo desde cualquier sitio, mira el README.
 
 import os
 
+# Carga automática de las variables de un archivo .env (p. ej. ANTHROPIC_API_KEY),
+# para no tener que escribir la clave cada vez.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, jsonify, render_template, request
 
 import core
