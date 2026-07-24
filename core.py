@@ -214,11 +214,11 @@ def transcribir_con_subtitulos(video_id: str, idioma: str | None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Resumen con Claude
+# Llamadas a Claude (resumen y traducción)
 # ---------------------------------------------------------------------------
 
-def generar_resumen(texto: str) -> str:
-    """Genera un breve resumen con los puntos más importantes usando Claude."""
+def _llamar_claude(prompt: str, max_tokens: int) -> str:
+    """Envía un prompt a Claude y devuelve el texto, con errores claros."""
     try:
         import anthropic
     except ImportError:
@@ -229,11 +229,37 @@ def generar_resumen(texto: str) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError(
-            "Para generar el resumen define la variable de entorno ANTHROPIC_API_KEY."
+            "Falta la clave de Anthropic. Crea un archivo .env con "
+            "ANTHROPIC_API_KEY=tu-clave (ver .env.example)."
         )
 
     client = anthropic.Anthropic(api_key=api_key)
 
+    try:
+        with client.messages.stream(
+            model=MODELO_CLAUDE,
+            max_tokens=max_tokens,
+            thinking={"type": "adaptive"},
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            mensaje = stream.get_final_message()
+    except anthropic.AuthenticationError:
+        raise RuntimeError(
+            "La clave de Anthropic no es válida. Revisa el archivo .env: la clave "
+            "debe empezar por 'sk-ant-', sin comillas ni espacios. Consíguela en "
+            "https://console.anthropic.com/keys"
+        )
+    except anthropic.APIStatusError as e:
+        raise RuntimeError(f"Error de la API de Anthropic ({e.status_code}): {e.message}")
+    except anthropic.APIError as e:
+        raise RuntimeError(f"Error al llamar a la API de Anthropic: {e}")
+
+    partes = [bloque.text for bloque in mensaje.content if bloque.type == "text"]
+    return "\n".join(partes).strip()
+
+
+def generar_resumen(texto: str) -> str:
+    """Genera un breve resumen con los puntos más importantes usando Claude."""
     prompt = (
         "A continuación tienes la transcripción completa de un vídeo. Redacta un "
         "resumen breve y claro, en el mismo idioma que la transcripción, que "
@@ -241,17 +267,7 @@ def generar_resumen(texto: str) -> str:
         "de resumen general y después incluye una lista con los puntos clave.\n\n"
         f"Transcripción:\n{texto}"
     )
-
-    with client.messages.stream(
-        model=MODELO_CLAUDE,
-        max_tokens=1500,
-        thinking={"type": "adaptive"},
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        mensaje = stream.get_final_message()
-
-    partes = [bloque.text for bloque in mensaje.content if bloque.type == "text"]
-    return "\n".join(partes).strip()
+    return _llamar_claude(prompt, max_tokens=1500)
 
 
 # Nombres legibles de idioma para el prompt de traducción.
@@ -265,39 +281,14 @@ NOMBRES_IDIOMA = {
 
 def traducir(texto: str, idioma_destino: str) -> str:
     """Traduce la transcripción al idioma indicado usando Claude."""
-    try:
-        import anthropic
-    except ImportError:
-        raise RuntimeError(
-            "Falta la librería 'anthropic'. Instálala con: pip install anthropic"
-        )
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "Para traducir define la variable de entorno ANTHROPIC_API_KEY."
-        )
-
     nombre = NOMBRES_IDIOMA.get(idioma_destino, idioma_destino)
-    client = anthropic.Anthropic(api_key=api_key)
-
     prompt = (
         f"Traduce el siguiente texto al {nombre}. Devuelve únicamente la "
         "traducción, sin comentarios ni notas, respetando el sentido y el tono "
         "original. Si el texto ya está en ese idioma, devuélvelo tal cual.\n\n"
         f"Texto:\n{texto}"
     )
-
-    with client.messages.stream(
-        model=MODELO_CLAUDE,
-        max_tokens=8000,
-        thinking={"type": "adaptive"},
-        messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        mensaje = stream.get_final_message()
-
-    partes = [bloque.text for bloque in mensaje.content if bloque.type == "text"]
-    return "\n".join(partes).strip()
+    return _llamar_claude(prompt, max_tokens=8000)
 
 
 def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
