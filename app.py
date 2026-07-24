@@ -48,6 +48,8 @@ def api_transcribir():
     modelo = datos.get("modelo") or "base"
     resumen = bool(datos.get("resumen"))
     traducir_a = (datos.get("traducir_a") or "").strip() or None
+    # motor de traducción: 'gratis' (Google, sin clave) o 'claude' (requiere clave)
+    motor_traduccion = datos.get("motor_traduccion") or "gratis"
 
     if not url:
         return jsonify({"error": "Introduce un enlace de vídeo."}), 400
@@ -65,7 +67,9 @@ def api_transcribir():
     texto_base = transcripcion
     if traducir_a:
         try:
-            respuesta["traduccion"] = core.traducir(transcripcion, traducir_a)
+            respuesta["traduccion"] = core.traducir(
+                transcripcion, traducir_a, motor=motor_traduccion
+            )
             texto_base = respuesta["traduccion"]
         except RuntimeError as e:
             respuesta["aviso_traduccion"] = str(e)

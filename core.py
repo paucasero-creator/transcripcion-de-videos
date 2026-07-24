@@ -279,8 +279,52 @@ NOMBRES_IDIOMA = {
 }
 
 
-def traducir(texto: str, idioma_destino: str) -> str:
-    """Traduce la transcripción al idioma indicado usando Claude."""
+def _trocear(texto: str, maximo: int = 4500) -> list:
+    """Parte el texto en trozos de como mucho 'maximo' caracteres, respetando
+    los límites de frase siempre que se pueda (para el traductor gratuito)."""
+    if len(texto) <= maximo:
+        return [texto]
+    trozos = []
+    actual = ""
+    for frase in re.split(r"(?<=[\.\?\!])\s+", texto):
+        if len(actual) + len(frase) + 1 > maximo:
+            if actual:
+                trozos.append(actual.strip())
+            # Si una sola frase supera el máximo, córtala a lo bruto.
+            while len(frase) > maximo:
+                trozos.append(frase[:maximo])
+                frase = frase[maximo:]
+            actual = frase
+        else:
+            actual = (actual + " " + frase).strip()
+    if actual:
+        trozos.append(actual.strip())
+    return trozos
+
+
+def traducir_gratis(texto: str, idioma_destino: str) -> str:
+    """Traduce el texto usando el traductor de Google (deep-translator), gratis
+    y sin necesidad de clave de API."""
+    try:
+        from deep_translator import GoogleTranslator
+    except ImportError:
+        raise RuntimeError(
+            "Falta la librería 'deep-translator'. Instálala con: "
+            "pip install deep-translator"
+        )
+
+    try:
+        traductor = GoogleTranslator(source="auto", target=idioma_destino)
+        partes = [traductor.translate(t) for t in _trocear(texto) if t.strip()]
+    except Exception as e:
+        raise RuntimeError(f"No se ha podido traducir: {e}")
+
+    return " ".join(p for p in partes if p).strip()
+
+
+def traducir_claude(texto: str, idioma_destino: str) -> str:
+    """Traduce la transcripción al idioma indicado usando Claude (más preciso,
+    requiere ANTHROPIC_API_KEY)."""
     nombre = NOMBRES_IDIOMA.get(idioma_destino, idioma_destino)
     prompt = (
         f"Traduce el siguiente texto al {nombre}. Devuelve únicamente la "
@@ -289,6 +333,14 @@ def traducir(texto: str, idioma_destino: str) -> str:
         f"Texto:\n{texto}"
     )
     return _llamar_claude(prompt, max_tokens=8000)
+
+
+def traducir(texto: str, idioma_destino: str, motor: str = "gratis") -> str:
+    """Traduce el texto. motor='gratis' usa Google (sin clave); motor='claude'
+    usa Claude (más preciso, requiere clave)."""
+    if motor == "claude":
+        return traducir_claude(texto, idioma_destino)
+    return traducir_gratis(texto, idioma_destino)
 
 
 def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,

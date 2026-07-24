@@ -84,7 +84,7 @@
         </div>
       </div>
 
-      <label for="traducir">Traducir la transcripción a</label>
+      <label for="traducir">Traducir la transcripción a <span style="font-weight:400;color:#16a34a;">(gratis)</span></label>
       <select id="traducir">
         <option value="">No traducir (idioma original)</option>
         <option value="es">Español</option>
@@ -98,7 +98,7 @@
 
       <label class="check"><input type="checkbox" id="resumen"> Generar también un resumen</label>
       {% if not hay_api_key %}
-      <div class="aviso">⚠️ La traducción y el resumen necesitan configurar ANTHROPIC_API_KEY.</div>
+      <div class="aviso">⚠️ El resumen necesita configurar ANTHROPIC_API_KEY. La traducción es gratis y no la necesita.</div>
       {% endif %}
 
       <button id="btn" onclick="transcribir()">Transcribir</button>
