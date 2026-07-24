@@ -37,8 +37,12 @@
       vertical-align: middle; margin-right: 8px; }
     @keyframes giro { to { transform: rotate(360deg); } }
     .resultado { white-space: pre-wrap; word-wrap: break-word; background: #fafafa;
-      border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; font-size: .95rem; }
+      border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; font-size: .95rem;
+      max-height: 60vh; overflow-y: auto; }
     .resultado h3 { margin-top: 0; }
+    .columnas { display: flex; gap: 16px; flex-wrap: wrap; }
+    .columna { flex: 1; min-width: 280px; }
+    .columna h3 { margin-top: 0; }
     .error { color: #b91c1c; font-weight: 600; }
     .oculto { display: none; }
     .copiar { margin-top: 10px; width: auto; padding: 8px 14px; background: #3f3f46; font-size: .85rem; }
@@ -111,15 +115,17 @@
         <h3>📌 Resumen</h3>
         <div class="resultado" id="resumen-texto"></div>
       </div>
-      <div id="traduccion-box" class="oculto" style="margin-top:16px;">
-        <h3>🌐 Traducción</h3>
-        <div class="resultado" id="traduccion-texto"></div>
-        <button class="copiar" onclick="copiar('traduccion-texto')">Copiar traducción</button>
-      </div>
-      <div id="transcripcion-box" class="oculto" style="margin-top:16px;">
-        <h3>📝 Transcripción (original)</h3>
-        <div class="resultado" id="transcripcion-texto"></div>
-        <button class="copiar" onclick="copiar('transcripcion-texto')">Copiar transcripción</button>
+      <div class="columnas" style="margin-top:16px;">
+        <div id="traduccion-box" class="oculto columna">
+          <h3>🌐 Traducción</h3>
+          <div class="resultado" id="traduccion-texto"></div>
+          <button class="copiar" onclick="copiar('traduccion-texto')">Copiar traducción</button>
+        </div>
+        <div id="transcripcion-box" class="oculto columna">
+          <h3>📝 Transcripción (original)</h3>
+          <div class="resultado" id="transcripcion-texto"></div>
+          <button class="copiar" onclick="copiar('transcripcion-texto')">Copiar transcripción</button>
+        </div>
       </div>
     </div>
   </div>
