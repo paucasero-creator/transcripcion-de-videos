@@ -62,6 +62,32 @@ def extraer_id_video(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Utilidades de yt-dlp (cookies / proxy)
+# ---------------------------------------------------------------------------
+
+def _aplicar_cookies_proxy(opciones: dict, carpeta: str | None) -> None:
+    """Añade cookies y proxy a las opciones de yt-dlp si están configurados por
+    variables de entorno. Sirve para saltar el bloqueo de YouTube en servidores.
+
+    - YT_COOKIES_FILE: ruta a un archivo de cookies (formato Netscape).
+    - YT_COOKIES: contenido del archivo de cookies (se vuelca a un temporal).
+    - YT_PROXY: URL de un proxy.
+    """
+    cookies_file = os.environ.get("YT_COOKIES_FILE")
+    cookies_data = os.environ.get("YT_COOKIES")
+    if not cookies_file and cookies_data and carpeta:
+        cookies_file = os.path.join(carpeta, "cookies.txt")
+        with open(cookies_file, "w", encoding="utf-8") as f:
+            f.write(cookies_data)
+    if cookies_file and os.path.exists(cookies_file):
+        opciones["cookiefile"] = cookies_file
+
+    proxy = os.environ.get("YT_PROXY")
+    if proxy:
+        opciones["proxy"] = proxy
+
+
+# ---------------------------------------------------------------------------
 # Método 1: transcripción desde el audio (Whisper) — por defecto
 # ---------------------------------------------------------------------------
 
@@ -99,24 +125,7 @@ def descargar_audio(url: str, carpeta: str) -> str:
         ],
     }
 
-    # Cookies de YouTube para saltar el bloqueo "confirma que no eres un bot"
-    # (necesario en servidores como Render). Se pueden aportar de dos formas:
-    #   - YT_COOKIES_FILE: ruta a un archivo de cookies (formato Netscape).
-    #   - YT_COOKIES: contenido del archivo de cookies directamente (útil como
-    #     variable de entorno en Render). Se vuelca a un archivo temporal.
-    cookies_file = os.environ.get("YT_COOKIES_FILE")
-    cookies_data = os.environ.get("YT_COOKIES")
-    if not cookies_file and cookies_data:
-        cookies_file = os.path.join(carpeta, "cookies.txt")
-        with open(cookies_file, "w", encoding="utf-8") as f:
-            f.write(cookies_data)
-    if cookies_file and os.path.exists(cookies_file):
-        opciones["cookiefile"] = cookies_file
-
-    # Opción para usar un proxy (p. ej. residencial) y evitar el bloqueo por IP.
-    proxy = os.environ.get("YT_PROXY")
-    if proxy:
-        opciones["proxy"] = proxy
+    _aplicar_cookies_proxy(opciones, carpeta)
 
     try:
         with yt_dlp.YoutubeDL(opciones) as ydl:
@@ -390,6 +399,111 @@ def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
     # Método subtítulos: solo YouTube (necesita el ID del vídeo).
     video_id = extraer_id_video(url)
     return transcribir_con_subtitulos(video_id, idioma)
+
+
+# ---------------------------------------------------------------------------
+# Descarga de vídeo en máxima calidad y capítulos
+# ---------------------------------------------------------------------------
+
+def descargar_video(url: str, carpeta: str, altura_max: int | None = None):
+    """Descarga el vídeo con la mejor calidad disponible (vídeo+audio unidos con
+    ffmpeg) y devuelve (ruta_archivo, titulo).
+
+    altura_max limita la resolución (p. ej. 1080). Si es None, usa la máxima.
+    """
+    try:
+        import yt_dlp
+    except ImportError:
+        raise RuntimeError(
+            "Falta la librería 'yt-dlp'. Instálala con: pip install yt-dlp"
+        )
+
+    if altura_max:
+        formato = (
+            f"bestvideo[height<={altura_max}]+bestaudio/"
+            f"best[height<={altura_max}]/best"
+        )
+    else:
+        formato = "bestvideo+bestaudio/best"
+
+    plantilla = os.path.join(carpeta, "%(title).150B.%(ext)s")
+    opciones = {
+        "format": formato,
+        "outtmpl": plantilla,
+        "merge_output_format": "mp4",
+        "quiet": True,
+        "no_warnings": True,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        "socket_timeout": 30,
+        "retries": 3,
+    }
+    _aplicar_cookies_proxy(opciones, carpeta)
+
+    try:
+        with yt_dlp.YoutubeDL(opciones) as ydl:
+            info = ydl.extract_info(url, download=True)
+            ruta = ydl.prepare_filename(info)
+    except Exception as e:
+        raise RuntimeError(f"No se ha podido descargar el vídeo: {e}")
+
+    # Tras unir, la extensión suele ser .mp4; si no existe, busca el archivo real.
+    base, _ = os.path.splitext(ruta)
+    ruta_mp4 = base + ".mp4"
+    if os.path.exists(ruta_mp4):
+        ruta = ruta_mp4
+    elif not os.path.exists(ruta):
+        ficheros = [f for f in os.listdir(carpeta)]
+        if ficheros:
+            ruta = os.path.join(carpeta, ficheros[0])
+        else:
+            raise RuntimeError("No se ha encontrado el vídeo descargado.")
+
+    titulo = info.get("title") or "video"
+    return ruta, titulo
+
+
+def obtener_capitulos(url: str):
+    """Devuelve (capitulos, titulo) de un vídeo de YouTube. Cada capítulo es
+    {'inicio': segundos, 'titulo': str}. Son los capítulos que pone el autor
+    del vídeo. Devuelve lista vacía si el vídeo no tiene capítulos."""
+    try:
+        import yt_dlp
+    except ImportError:
+        raise RuntimeError(
+            "Falta la librería 'yt-dlp'. Instálala con: pip install yt-dlp"
+        )
+
+    opciones = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+    }
+    _aplicar_cookies_proxy(opciones, None)
+
+    try:
+        with yt_dlp.YoutubeDL(opciones) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as e:
+        raise RuntimeError(f"No se ha podido obtener la información del vídeo: {e}")
+
+    capitulos = [
+        {"inicio": c.get("start_time", 0.0), "titulo": c.get("title", "").strip()}
+        for c in (info.get("chapters") or [])
+    ]
+    return capitulos, (info.get("title") or "video")
+
+
+def capitulos_texto(capitulos: list) -> str:
+    """Formatea los capítulos como líneas '[min:seg] Título'."""
+    return "\n".join(
+        f"[{formato_tiempo(c['inicio'])}] {c['titulo']}"
+        for c in capitulos if c.get("titulo") is not None
+    )
 
 
 # ---------------------------------------------------------------------------

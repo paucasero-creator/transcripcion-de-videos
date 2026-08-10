@@ -110,6 +110,34 @@
       <div id="estado"><span class="spinner"></span><span id="estado-texto">Procesando...</span></div>
     </div>
 
+    <div class="tarjeta">
+      <h3 style="margin-top:0;">⬇️ Descargar vídeo</h3>
+      <p class="sub" style="margin-top:0;">Descarga el vídeo en máxima calidad. Si es de YouTube, también ves sus capítulos.</p>
+      <label for="url-descarga">Enlace del vídeo</label>
+      <input type="text" id="url-descarga" placeholder="YouTube, Twitter/X, Instagram, TikTok...">
+      <div class="fila">
+        <div>
+          <label for="calidad">Calidad</label>
+          <select id="calidad">
+            <option value="max">Máxima disponible</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="btn-capitulos" onclick="verCapitulos()" style="background:#3f3f46;">Ver capítulos</button>
+        <button id="btn-descarga" onclick="descargarVideo()">Descargar vídeo</button>
+      </div>
+      <div id="estado-descarga" class="oculto" style="margin-top:14px;font-weight:600;color:#52525b;"><span class="spinner"></span><span id="estado-descarga-texto">Procesando...</span></div>
+      <div id="capitulos-box" class="oculto" style="margin-top:14px;">
+        <h3>📑 Capítulos del vídeo</h3>
+        <div class="resultado" id="capitulos-texto"></div>
+        <button class="copiar" onclick="copiar('capitulos-texto')">Copiar capítulos</button>
+      </div>
+    </div>
+
     <div class="tarjeta oculto" id="tarjeta-resultado">
       <div id="error-box" class="error oculto"></div>
       <div id="temas-box" class="oculto">
@@ -239,8 +267,84 @@
     function copiar(id) {
       const texto = document.getElementById(id || 'transcripcion-texto').textContent;
       navigator.clipboard.writeText(texto).then(() => {
-        alert('Transcripción copiada al portapapeles.');
+        alert('Texto copiado al portapapeles.');
       });
+    }
+
+    function urlDescarga() {
+      const u = document.getElementById('url-descarga').value.trim();
+      if (!u) { alert('Introduce un enlace de vídeo.'); return null; }
+      return u;
+    }
+
+    function estadoDescarga(txt) {
+      const box = document.getElementById('estado-descarga');
+      if (txt) { box.classList.remove('oculto'); document.getElementById('estado-descarga-texto').textContent = txt; }
+      else { box.classList.add('oculto'); }
+    }
+
+    async function verCapitulos() {
+      const url = urlDescarga();
+      if (!url) return;
+      const btn = document.getElementById('btn-capitulos');
+      btn.disabled = true;
+      estadoDescarga('Obteniendo capítulos...');
+      document.getElementById('capitulos-box').classList.add('oculto');
+      try {
+        const resp = await fetch('/api/capitulos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const datos = await resp.json();
+        if (!resp.ok || datos.error) { alert('❌ ' + (datos.error || 'Error')); return; }
+        const box = document.getElementById('capitulos-box');
+        document.getElementById('capitulos-texto').textContent =
+          datos.tiene_capitulos ? datos.capitulos : 'Este vídeo no tiene capítulos definidos por el autor. Usa la transcripción con marcas de tiempo para localizar clips.';
+        box.classList.remove('oculto');
+      } catch (e) {
+        alert('No se ha podido conectar con el servidor.');
+      } finally {
+        btn.disabled = false;
+        estadoDescarga(null);
+      }
+    }
+
+    async function descargarVideo() {
+      const url = urlDescarga();
+      if (!url) return;
+      const btn = document.getElementById('btn-descarga');
+      btn.disabled = true;
+      estadoDescarga('Descargando el vídeo en máxima calidad (puede tardar)...');
+      try {
+        const resp = await fetch('/api/descargar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, calidad: document.getElementById('calidad').value })
+        });
+        if (!resp.ok) {
+          const datos = await resp.json().catch(() => ({}));
+          alert('❌ ' + (datos.error || 'No se ha podido descargar el vídeo.'));
+          return;
+        }
+        // Descargar el archivo recibido.
+        const blob = await resp.blob();
+        const disp = resp.headers.get('Content-Disposition') || '';
+        const m = disp.match(/filename\*?=(?:UTF-8'')?"?([^\";]+)"?/i);
+        const nombre = m ? decodeURIComponent(m[1]) : 'video.mp4';
+        const enlace = document.createElement('a');
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = nombre;
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        URL.revokeObjectURL(enlace.href);
+      } catch (e) {
+        alert('No se ha podido conectar con el servidor.');
+      } finally {
+        btn.disabled = false;
+        estadoDescarga(null);
+      }
     }
   </script>
 </body>

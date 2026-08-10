@@ -23,7 +23,12 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, jsonify, render_template, request
+import shutil
+import tempfile
+
+from flask import (
+    Flask, after_this_request, jsonify, render_template, request, send_file,
+)
 
 import core
 
@@ -92,6 +97,51 @@ def api_transcribir():
             respuesta["aviso_resumen"] = str(e)
 
     return jsonify(respuesta)
+
+
+@app.route("/api/capitulos", methods=["POST"])
+def api_capitulos():
+    """Devuelve los capítulos (timestamps del autor) de un vídeo de YouTube."""
+    datos = request.get_json(silent=True) or {}
+    url = (datos.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "Introduce un enlace de vídeo."}), 400
+    try:
+        capitulos, titulo = core.obtener_capitulos(url)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({
+        "titulo": titulo,
+        "capitulos": core.capitulos_texto(capitulos),
+        "tiene_capitulos": bool(capitulos),
+    })
+
+
+@app.route("/api/descargar", methods=["POST"])
+def api_descargar():
+    """Descarga el vídeo en máxima calidad y lo envía al navegador."""
+    datos = request.get_json(silent=True) or {}
+    url = (datos.get("url") or "").strip()
+    calidad = datos.get("calidad") or "max"
+    if not url:
+        return jsonify({"error": "Introduce un enlace de vídeo."}), 400
+
+    altura_max = None if calidad == "max" else int(calidad)
+    carpeta = tempfile.mkdtemp(prefix="descarga_")
+
+    try:
+        ruta, titulo = core.descargar_video(url, carpeta, altura_max=altura_max)
+    except (ValueError, RuntimeError) as e:
+        shutil.rmtree(carpeta, ignore_errors=True)
+        return jsonify({"error": str(e)}), 400
+
+    @after_this_request
+    def limpiar(response):
+        shutil.rmtree(carpeta, ignore_errors=True)
+        return response
+
+    nombre = os.path.basename(ruta)
+    return send_file(ruta, as_attachment=True, download_name=nombre)
 
 
 if __name__ == "__main__":
