@@ -168,7 +168,7 @@ def transcribir_con_whisper(url: str, modelo: str, idioma: str | None):
 
         print("Transcribiendo el audio (esto puede tardar un rato)...",
               file=sys.stderr)
-        opciones = {}
+        opciones = {"word_timestamps": True}
         if idioma:
             opciones["language"] = idioma
         resultado = modelo_whisper.transcribe(ruta_audio, **opciones)
@@ -181,12 +181,41 @@ def transcribir_con_whisper(url: str, modelo: str, idioma: str | None):
     if not texto:
         raise RuntimeError("Whisper no ha devuelto ninguna transcripción.")
 
-    segmentos = [
-        {"inicio": s.get("start", 0.0), "fin": s.get("end", 0.0),
-         "texto": s.get("text", "").strip()}
-        for s in resultado.get("segments", [])
-    ]
+    segmentos = _segmentos_cortos(resultado.get("segments", []))
     return texto, segmentos
+
+
+def _segmentos_cortos(segmentos_whisper: list, max_palabras: int = 7,
+                      max_seg: float = 4.0) -> list:
+    """Reagrupa las palabras de Whisper en líneas cortas estilo subtítulo
+    (unas pocas palabras / segundos por línea). Si no hay marcas de palabra,
+    usa el segmento tal cual."""
+    lineas = []
+    for s in segmentos_whisper:
+        palabras = s.get("words") or []
+        if not palabras:
+            texto = s.get("text", "").strip()
+            if texto:
+                lineas.append({"inicio": s.get("start", 0.0),
+                               "fin": s.get("end", 0.0), "texto": texto})
+            continue
+
+        actual = []
+        inicio = None
+        for w in palabras:
+            if inicio is None:
+                inicio = w.get("start", 0.0)
+            actual.append(w.get("word", ""))
+            fin = w.get("end", inicio)
+            if len(actual) >= max_palabras or (fin - inicio) >= max_seg:
+                lineas.append({"inicio": inicio, "fin": fin,
+                               "texto": "".join(actual).strip()})
+                actual = []
+                inicio = None
+        if actual:
+            lineas.append({"inicio": inicio, "fin": palabras[-1].get("end", inicio),
+                           "texto": "".join(actual).strip()})
+    return lineas
 
 
 # ---------------------------------------------------------------------------
@@ -521,10 +550,13 @@ def formato_tiempo(segundos: float) -> str:
 
 
 def transcripcion_con_marcas(segmentos: list) -> str:
-    """Devuelve la transcripción con una marca de tiempo delante de cada
-    fragmento, p. ej.  [1:23] texto..."""
+    """Devuelve la transcripción con una marca de tiempo delante de cada línea,
+    estilo subtítulo, p. ej.:
+        0:15  entonces lo primero que tienes que entender
+        0:18  es que la atención no se pide
+    """
     lineas = [
-        f"[{formato_tiempo(s['inicio'])}] {s['texto']}"
+        f"{formato_tiempo(s['inicio'])}  {s['texto']}"
         for s in segmentos if s.get("texto")
     ]
     return "\n".join(lineas)
