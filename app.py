@@ -50,18 +50,29 @@ def api_transcribir():
     traducir_a = (datos.get("traducir_a") or "").strip() or None
     # motor de traducción: 'gratis' (Google, sin clave) o 'claude' (requiere clave)
     motor_traduccion = datos.get("motor_traduccion") or "gratis"
+    analizar_temas = bool(datos.get("analizar_temas"))
 
     if not url:
         return jsonify({"error": "Introduce un enlace de vídeo."}), 400
 
     try:
-        transcripcion = core.transcribir(
+        transcripcion, segmentos = core.transcribir(
             url, metodo=metodo, idioma=idioma, modelo=modelo
         )
     except (ValueError, RuntimeError) as e:
         return jsonify({"error": str(e)}), 400
 
-    respuesta = {"transcripcion": transcripcion}
+    respuesta = {
+        "transcripcion": transcripcion,
+        "marcas": core.transcripcion_con_marcas(segmentos),
+    }
+
+    # Análisis de temas con marcas de tiempo (para clips). Usa Claude.
+    if analizar_temas:
+        try:
+            respuesta["temas"] = core.analizar_temas(segmentos)
+        except RuntimeError as e:
+            respuesta["aviso_temas"] = str(e)
 
     # Traducción opcional al idioma elegido (texto sobre el que se resume).
     texto_base = transcripcion

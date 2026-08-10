@@ -136,8 +136,12 @@ def descargar_audio(url: str, carpeta: str) -> str:
     return ruta
 
 
-def transcribir_con_whisper(url: str, modelo: str, idioma: str | None) -> str:
-    """Descarga el audio y lo transcribe con Whisper (en local)."""
+def transcribir_con_whisper(url: str, modelo: str, idioma: str | None):
+    """Descarga el audio y lo transcribe con Whisper (en local).
+
+    Devuelve una tupla (texto, segmentos), donde segmentos es una lista de
+    diccionarios {'inicio': segundos, 'fin': segundos, 'texto': str}.
+    """
     try:
         import whisper
     except ImportError:
@@ -167,15 +171,24 @@ def transcribir_con_whisper(url: str, modelo: str, idioma: str | None) -> str:
     texto = resultado.get("text", "").strip()
     if not texto:
         raise RuntimeError("Whisper no ha devuelto ninguna transcripción.")
-    return texto
+
+    segmentos = [
+        {"inicio": s.get("start", 0.0), "fin": s.get("end", 0.0),
+         "texto": s.get("text", "").strip()}
+        for s in resultado.get("segments", [])
+    ]
+    return texto, segmentos
 
 
 # ---------------------------------------------------------------------------
 # Método 2: transcripción desde los subtítulos de YouTube
 # ---------------------------------------------------------------------------
 
-def transcribir_con_subtitulos(video_id: str, idioma: str | None) -> str:
-    """Obtiene la transcripción de los subtítulos de YouTube."""
+def transcribir_con_subtitulos(video_id: str, idioma: str | None):
+    """Obtiene la transcripción de los subtítulos de YouTube.
+
+    Devuelve una tupla (texto, segmentos) con marcas de tiempo.
+    """
     from youtube_transcript_api import YouTubeTranscriptApi
     from youtube_transcript_api._errors import (
         NoTranscriptFound,
@@ -209,8 +222,14 @@ def transcribir_con_subtitulos(video_id: str, idioma: str | None) -> str:
         )
 
     datos = transcript.fetch()
-    texto = " ".join(fragmento["text"].strip() for fragmento in datos)
-    return re.sub(r"\s+", " ", texto).strip()
+    segmentos = [
+        {"inicio": f.get("start", 0.0),
+         "fin": f.get("start", 0.0) + f.get("duration", 0.0),
+         "texto": f["text"].strip()}
+        for f in datos
+    ]
+    texto = re.sub(r"\s+", " ", " ".join(s["texto"] for s in segmentos)).strip()
+    return texto, segmentos
 
 
 # ---------------------------------------------------------------------------
@@ -371,3 +390,49 @@ def transcribir(url: str, metodo: str = "audio", idioma: str | None = None,
     # Método subtítulos: solo YouTube (necesita el ID del vídeo).
     video_id = extraer_id_video(url)
     return transcribir_con_subtitulos(video_id, idioma)
+
+
+# ---------------------------------------------------------------------------
+# Marcas de tiempo y análisis de temas (para sacar clips)
+# ---------------------------------------------------------------------------
+
+def formato_tiempo(segundos: float) -> str:
+    """Convierte segundos a formato mm:ss o hh:mm:ss."""
+    segundos = int(segundos)
+    horas, resto = divmod(segundos, 3600)
+    minutos, seg = divmod(resto, 60)
+    if horas:
+        return f"{horas}:{minutos:02d}:{seg:02d}"
+    return f"{minutos}:{seg:02d}"
+
+
+def transcripcion_con_marcas(segmentos: list) -> str:
+    """Devuelve la transcripción con una marca de tiempo delante de cada
+    fragmento, p. ej.  [1:23] texto..."""
+    lineas = [
+        f"[{formato_tiempo(s['inicio'])}] {s['texto']}"
+        for s in segmentos if s.get("texto")
+    ]
+    return "\n".join(lineas)
+
+
+def analizar_temas(segmentos: list) -> str:
+    """Analiza los temas del vídeo y en qué minuto empieza cada uno, usando
+    Claude. Pensado para localizar clips. Requiere ANTHROPIC_API_KEY."""
+    if not segmentos:
+        raise RuntimeError("No hay marcas de tiempo para analizar los temas.")
+
+    marcas = transcripcion_con_marcas(segmentos)
+    prompt = (
+        "Eres un editor de vídeo que busca clips. A continuación tienes la "
+        "transcripción de un vídeo con marcas de tiempo [min:seg] al principio "
+        "de cada fragmento. Identifica los distintos temas o momentos "
+        "interesantes que se tratan. Para cada uno, indica:\n"
+        "- La marca de tiempo de inicio (usa las marcas del texto)\n"
+        "- Un título corto del tema\n"
+        "- Una frase describiendo de qué trata y por qué puede ser un buen clip\n\n"
+        "Devuelve una lista ordenada por tiempo, en el mismo idioma de la "
+        "transcripción. Formato de cada línea:  [min:seg] Título — descripción.\n\n"
+        f"Transcripción:\n{marcas}"
+    )
+    return _llamar_claude(prompt, max_tokens=4000)

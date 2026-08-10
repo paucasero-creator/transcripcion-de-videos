@@ -51,6 +51,16 @@ def main() -> int:
         "defecto: base.",
     )
     parser.add_argument(
+        "--marcas",
+        action="store_true",
+        help="Añade la transcripción con marcas de tiempo [min:seg] (útil para clips).",
+    )
+    parser.add_argument(
+        "--temas",
+        action="store_true",
+        help="Analiza los temas y en qué minuto salen, para localizar clips (usa Claude).",
+    )
+    parser.add_argument(
         "--resumen",
         action="store_true",
         help="Genera además un breve resumen con lo más importante (usa Claude).",
@@ -63,7 +73,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        transcripcion = core.transcribir(
+        transcripcion, segmentos = core.transcribir(
             args.url, metodo=args.metodo, idioma=args.idioma, modelo=args.modelo
         )
     except (ValueError, RuntimeError) as e:
@@ -71,6 +81,18 @@ def main() -> int:
         return 1
 
     salida = ["=== TRANSCRIPCIÓN ===", "", transcripcion]
+
+    if args.marcas:
+        salida += ["", "=== TRANSCRIPCIÓN CON MARCAS DE TIEMPO ===", "",
+                   core.transcripcion_con_marcas(segmentos)]
+
+    if args.temas:
+        print("Analizando temas con Claude...", file=sys.stderr)
+        try:
+            temas = core.analizar_temas(segmentos)
+            salida += ["", "=== TEMAS Y MINUTOS (para clips) ===", "", temas]
+        except RuntimeError as e:
+            print(f"Aviso: no se han podido analizar los temas: {e}", file=sys.stderr)
 
     if args.resumen:
         print("Generando el resumen con Claude...", file=sys.stderr)

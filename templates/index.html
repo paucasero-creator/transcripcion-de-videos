@@ -100,9 +100,10 @@
         <option value="ca">Catalán</option>
       </select>
 
+      <label class="check"><input type="checkbox" id="temas"> 🎬 Analizar temas y minutos (para clips)</label>
       <label class="check"><input type="checkbox" id="resumen"> Generar también un resumen</label>
       {% if not hay_api_key %}
-      <div class="aviso">⚠️ El resumen necesita configurar ANTHROPIC_API_KEY. La traducción es gratis y no la necesita.</div>
+      <div class="aviso">⚠️ El análisis de temas y el resumen necesitan ANTHROPIC_API_KEY. La transcripción, las marcas de tiempo y la traducción son gratis.</div>
       {% endif %}
 
       <button id="btn" onclick="transcribir()">Transcribir</button>
@@ -111,9 +112,19 @@
 
     <div class="tarjeta oculto" id="tarjeta-resultado">
       <div id="error-box" class="error oculto"></div>
-      <div id="resumen-box" class="oculto">
+      <div id="temas-box" class="oculto">
+        <h3>🎬 Temas y minutos (para clips)</h3>
+        <div class="resultado" id="temas-texto"></div>
+        <button class="copiar" onclick="copiar('temas-texto')">Copiar temas</button>
+      </div>
+      <div id="resumen-box" class="oculto" style="margin-top:16px;">
         <h3>📌 Resumen</h3>
         <div class="resultado" id="resumen-texto"></div>
+      </div>
+      <div id="marcas-box" class="oculto" style="margin-top:16px;">
+        <h3>⏱️ Transcripción con marcas de tiempo</h3>
+        <div class="resultado" id="marcas-texto"></div>
+        <button class="copiar" onclick="copiar('marcas-texto')">Copiar con marcas</button>
       </div>
       <div class="columnas" style="margin-top:16px;">
         <div id="traduccion-box" class="oculto columna">
@@ -156,6 +167,7 @@
             idioma: document.getElementById('idioma').value,
             modelo: document.getElementById('modelo').value,
             traducir_a: document.getElementById('traducir').value,
+            analizar_temas: document.getElementById('temas').checked,
             resumen
           })
         });
@@ -172,11 +184,15 @@
     function mostrar(datos, ok) {
       const tarjeta = document.getElementById('tarjeta-resultado');
       const errorBox = document.getElementById('error-box');
+      const temasBox = document.getElementById('temas-box');
+      const marcasBox = document.getElementById('marcas-box');
       const resumenBox = document.getElementById('resumen-box');
       const tradBox = document.getElementById('traduccion-box');
       const transBox = document.getElementById('transcripcion-box');
       tarjeta.classList.remove('oculto');
       errorBox.classList.add('oculto');
+      temasBox.classList.add('oculto');
+      marcasBox.classList.add('oculto');
       resumenBox.classList.add('oculto');
       tradBox.classList.add('oculto');
       transBox.classList.add('oculto');
@@ -185,6 +201,19 @@
         errorBox.textContent = '❌ ' + (datos.error || 'Ha ocurrido un error.');
         errorBox.classList.remove('oculto');
         return;
+      }
+
+      if (datos.temas) {
+        document.getElementById('temas-texto').textContent = datos.temas;
+        temasBox.classList.remove('oculto');
+      } else if (datos.aviso_temas) {
+        document.getElementById('temas-texto').textContent = '⚠️ ' + datos.aviso_temas;
+        temasBox.classList.remove('oculto');
+      }
+
+      if (datos.marcas) {
+        document.getElementById('marcas-texto').textContent = datos.marcas;
+        marcasBox.classList.remove('oculto');
       }
 
       if (datos.resumen) {
